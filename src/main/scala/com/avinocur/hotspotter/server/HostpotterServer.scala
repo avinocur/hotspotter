@@ -12,7 +12,6 @@ import com.avinocur.hotspotter.repository.{RedisConnection, RedisConnector, Redi
 import com.avinocur.hotspotter.utils.config.HotspotterConfig
 import fs2.StreamApp
 import fs2.internal.NonFatal
-import io.circe.generic.auto._
 import org.http4s._
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
@@ -79,7 +78,8 @@ object HostpotterServer extends StreamApp[IO] with Http4sDsl[IO] with LogSupport
         hotspotRepository.getTopKeys()
       } {
         topKeys =>
-          if(topKeys.contains(key)) NoContent()
+          if(key.isEmpty) BadRequest("Key is mandatory. Maybe you are looking for the /hotspots resource...")
+          else if(topKeys.contains(key)) NoContent()
           else NotFound()
       }
 
