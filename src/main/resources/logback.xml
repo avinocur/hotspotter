@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true">
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
+
+    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                <![CDATA[%date %-4level [%thread] [${HOSTNAME}] : %message%n]]>
+            </pattern>
+        </encoder>
+    </appender>
+
+    <appender name="async" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="console"/>
+        <!-- <appender-ref ref="udpAppender"/> -->
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="async" />
+    </root>
+
+    <logger name="org.http4s.blaze" level="INFO" />
+    <logger name="com.avinocur.hotspotter" level="DEBUG" />
+</configuration>
