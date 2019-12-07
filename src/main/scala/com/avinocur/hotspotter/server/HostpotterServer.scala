@@ -36,9 +36,6 @@ object HostpotterServer extends StreamApp[IO] with Http4sDsl[IO] with LogSupport
   val redisConnection: RedisConnection[IO] = RedisConnector()
   val hotspotRepository = new RedisHotspotRepository(redisConnection, HotspotterConfig.keyHits)
 
-  val HOTSPOTS = "hotspots"
-  val KEYS = "keys"
-
   protected def createActorSystem: ActorSystem = ActorSystem("RedisClient")
 
   def errorHandler: ServiceErrorHandler[IO] = req => {
@@ -77,14 +74,23 @@ object HostpotterServer extends StreamApp[IO] with Http4sDsl[IO] with LogSupport
   }
 
   val service = HttpService[IO] {
-    case GET -> Root / HOTSPOTS =>
+    case GET -> Root / "hotspots" / key  =>
+      handleService {
+        hotspotRepository.getTopKeys()
+      } {
+        topKeys =>
+          if(topKeys.contains(key)) NoContent()
+          else NotFound()
+      }
+
+    case GET -> Root / "hotspots" =>
       handleService{
         hotspotRepository.getTopKeys()
       }{
         topKeys => Ok(HotspotterKeysResponse(topKeys).asJson)
       }
 
-    case req @ POST -> Root / KEYS => req.decodeWith(jsonOf[IO, KeyHits], strict = false) { keyHits =>
+    case req @ POST -> Root / "keys" => req.decodeWith(jsonOf[IO, KeyHits], strict = false) { keyHits =>
       handleService{
         hotspotRepository.save(keyHits.hits)
       }{
