@@ -5,6 +5,7 @@ import java.io.File
 import com.avinocur.hotspotter.LogSupport
 import com.typesafe.config.{Config, ConfigFactory}
 
+
 trait ConfigurationSupport {
   val config: Config = ConfigurationSupport.configuration
 }

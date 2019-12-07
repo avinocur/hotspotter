@@ -4,8 +4,8 @@ import akka.actor.ActorSystem
 import cats.implicits._
 import cats.effect.IO
 import com.avinocur.hotspotter.LogSupport
-import com.avinocur.hotspotter.utils.BucketUtils
 import com.avinocur.hotspotter.utils.config.HotspotterConfig
+import com.avinocur.hotspotter.utils.config.HotspotterConfig.KeyHitsConfig
 import redis.{RedisClient, RedisClientMasterSlaves, RedisCommands, RedisServer}
 import redis.commands.Transactions
 
@@ -15,12 +15,12 @@ import scala.concurrent.duration._
 
 trait RedisConnection[F[_]] extends LogSupport {
   def incrementCounter(bucket: String, key: String, expireAt: Duration, quantity: Double = 1): F[Unit]
-  def getTopKeys(): F[Seq[String]]
+  def getTopKeys(counterBuckets: List[String], keyLimit: Int): F[Seq[String]]
 
   def flushAll: F[Boolean]
 }
 
-class RedisConnector(client: Transactions with RedisCommands) extends RedisConnection[IO] {
+class RedisConnector(client: Transactions with RedisCommands, keyHitsConfig: KeyHitsConfig) extends RedisConnection[IO] {
   val aggregationBucket = "aggregated"
 
   override def incrementCounter(bucket: String, key: String, expireAt: Duration, quantity: Double): IO[Unit] =
@@ -34,23 +34,21 @@ class RedisConnector(client: Transactions with RedisCommands) extends RedisConne
       }
     })
 
-  override def getTopKeys(): IO[Seq[String]] = {
+  override def getTopKeys(counterBuckets: List[String], keyLimit: Int): IO[Seq[String]] = {
     val lowerBound: Long = 0
-    val upperBound: Long = HotspotterConfig.keyHits.keyLimit.toLong - 1
+    val upperBound: Long = keyLimit.toLong - 1
 
     (for {
       _ ← IO {log.debug(s"executing: ZREVRANGE $aggregationBucket $lowerBound $upperBound")}
       current ← IO.fromFuture(IO {client.zrevrange[String](aggregationBucket, lowerBound, upperBound)})
     } yield current match {
-      case Nil ⇒ createAggregationBucket(lowerBound, upperBound)
+      case Nil ⇒ createAggregationBucket(counterBuckets, lowerBound, upperBound)
       case resp ⇒ IO.pure(resp)
     }).flatten
   }
 
-  private def createAggregationBucket(lowerBound: Long, upperBound: Long): IO[Seq[String]] = {
-    val timeWindow = HotspotterConfig.keyHits.timeWindowHours
-    val counterBuckets = BucketUtils.aggregationWindowBuckets(timeWindow)
-    val expiration: Long = HotspotterConfig.keyHits.currentKeyExpireAt.toSeconds
+  private def createAggregationBucket(counterBuckets: List[String], lowerBound: Long, upperBound: Long): IO[Seq[String]] = {
+    val expiration: Long = keyHitsConfig.currentKeyExpireAt.toSeconds
 
     log.debug(s"executing ZUNIONSTORE $aggregationBucket ${counterBuckets.size.toString} ${counterBuckets.mkString(",")}")
     log.debug(s"executing EXPIRE $aggregationBucket $expiration")
@@ -78,7 +76,7 @@ object RedisConnector extends LogSupport {
 
   def apply()(implicit as: ActorSystem): RedisConnector = resolveConnections(HotspotterConfig.redis.hosts.map(h ⇒ {
     RedisServer(h, HotspotterConfig.redis.hostsPort, HotspotterConfig.redis.password)})) match {
-    case connections if connections.nonEmpty ⇒ new RedisConnector(resolveClient(connections))
+    case connections if connections.nonEmpty ⇒ new RedisConnector(resolveClient(connections), HotspotterConfig.keyHits)
     case _ ⇒ throw new RuntimeException("No available redis server was found")
   }
 

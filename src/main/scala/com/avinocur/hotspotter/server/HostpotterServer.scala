@@ -34,7 +34,7 @@ object HostpotterServer extends StreamApp[IO] with Http4sDsl[IO] with LogSupport
   implicit val actorSystem: ActorSystem = createActorSystem
 
   val redisConnection: RedisConnection[IO] = RedisConnector()
-  val hotspotRepository = new RedisHotspotRepository(redisConnection)
+  val hotspotRepository = new RedisHotspotRepository(redisConnection, HotspotterConfig.keyHits)
 
   val HOTSPOTS = "hotspots"
   val KEYS = "keys"

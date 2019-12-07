@@ -6,9 +6,10 @@ import com.avinocur.hotspotter.LogSupport
 import com.avinocur.hotspotter.model.{KeyHit, KeyHitRecord}
 import com.avinocur.hotspotter.utils.BucketUtils
 import com.avinocur.hotspotter.utils.config.HotspotterConfig
+import com.avinocur.hotspotter.utils.config.HotspotterConfig.KeyHitsConfig
 
 
-class RedisHotspotRepository(redisClient: RedisConnection[IO]) extends HotspotRepository with LogSupport {
+class RedisHotspotRepository(redisClient: RedisConnection[IO], keyHitsConfig: KeyHitsConfig) extends HotspotRepository with LogSupport {
   import HotspotRepository._
 
   def save(keyHits: Seq[KeyHit]): IO[Unit] = {
@@ -17,8 +18,12 @@ class RedisHotspotRepository(redisClient: RedisConnection[IO]) extends HotspotRe
     } yield redisClient.incrementCounter(BucketUtils.currentBucket, keyHitRecord.key, HotspotterConfig.keyHits.expireAt, keyHitRecord.count)).toList.sequence_
   }
 
-  def getTopKeys(): IO[List[String]] =
-    redisClient.getTopKeys().map(t => t.toList)
+  def getTopKeys(): IO[List[String]] = {
+    val timeWindow = HotspotterConfig.keyHits.timeWindowHours
+    val counterBuckets = BucketUtils.aggregationWindowBuckets(timeWindow)
+
+    redisClient.getTopKeys(counterBuckets, keyHitsConfig.keyLimit).map(t => t.toList)
+  }
 }
 
 trait HotspotRepository {
