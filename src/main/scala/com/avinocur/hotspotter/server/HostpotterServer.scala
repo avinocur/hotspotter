@@ -8,7 +8,7 @@ import cats.effect.IO
 import com.avinocur.hotspotter.LogSupport
 import com.avinocur.hotspotter.api.{HotspotterErrorResponse, HotspotterKeysResponse}
 import com.avinocur.hotspotter.model.KeyHits
-import com.avinocur.hotspotter.repository.{RedisConnection, RedisConnector, RedisHotspotRepository}
+import com.avinocur.hotspotter.repository.{BucketGenerator, CountersConnection, CountersRedisConnector, HotspotRepository, HotspotRepositoryLike}
 import com.avinocur.hotspotter.utils.config.HotspotterConfig
 import fs2.StreamApp
 import fs2.internal.NonFatal
@@ -32,8 +32,8 @@ object HostpotterServer extends StreamApp[IO] with Http4sDsl[IO] with LogSupport
   implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutorService(executor)
   implicit val actorSystem: ActorSystem = createActorSystem
 
-  val redisConnection: RedisConnection[IO] = RedisConnector()
-  val hotspotRepository = new RedisHotspotRepository(redisConnection, HotspotterConfig.keyHits)
+  val redisConnection: CountersConnection[IO] = CountersRedisConnector()
+  val hotspotRepository: HotspotRepositoryLike = new HotspotRepository(redisConnection, HotspotterConfig.keyHits, new BucketGenerator())
 
   protected def createActorSystem: ActorSystem = ActorSystem("RedisClient")
 

@@ -13,14 +13,14 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-trait RedisConnection[F[_]] extends LogSupport {
+trait CountersConnection[F[_]] extends LogSupport {
   def incrementCounter(bucket: String, key: String, expireAt: Duration, quantity: Double = 1): F[Unit]
   def getTopKeys(counterBuckets: List[String], keyLimit: Int): F[Seq[String]]
 
   def flushAll: F[Boolean]
 }
 
-class RedisConnector(client: Transactions with RedisCommands, keyHitsConfig: KeyHitsConfig) extends RedisConnection[IO] {
+class CountersRedisConnector(client: Transactions with RedisCommands, keyHitsConfig: KeyHitsConfig) extends CountersConnection[IO] {
   val aggregationBucket = "aggregated"
 
   override def incrementCounter(bucket: String, key: String, expireAt: Duration, quantity: Double): IO[Unit] =
@@ -67,16 +67,16 @@ class RedisConnector(client: Transactions with RedisCommands, keyHitsConfig: Key
   else IO.pure(false)
 }
 
-object RedisConnector extends LogSupport {
+object CountersRedisConnector extends LogSupport {
   private val masterRoleName = "master"
   private val slaveRoleName = "slave"
   private val replicationSectionName = "Replication"
   private val pongResponse = "PONG"
   private val role = "role"
 
-  def apply()(implicit as: ActorSystem): RedisConnector = resolveConnections(HotspotterConfig.redis.hosts.map(h ⇒ {
+  def apply()(implicit as: ActorSystem): CountersRedisConnector = resolveConnections(HotspotterConfig.redis.hosts.map(h ⇒ {
     RedisServer(h, HotspotterConfig.redis.hostsPort, HotspotterConfig.redis.password)})) match {
-    case connections if connections.nonEmpty ⇒ new RedisConnector(resolveClient(connections), HotspotterConfig.keyHits)
+    case connections if connections.nonEmpty ⇒ new CountersRedisConnector(resolveClient(connections), HotspotterConfig.keyHits)
     case _ ⇒ throw new RuntimeException("No available redis server was found")
   }
 

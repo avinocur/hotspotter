@@ -83,7 +83,9 @@ Status: 404 Not Found
 
 ## Future Work
 
-* Stress tests using Gatling.
+* Local cache of last hotspots to respond in case of a failure on Redis cluster
+* Store a local oplog file and recover from it in case of a failure writing the keys to Redis.
+* Performance/Stress tests using Gatling.
 * Enable configuration of custom buckets instead of fixed hour buckets.
 * Add a way to post summarized hit counts instead of having to repeat the keys.
 * Figure out how to get rid of the annoying security pop-ups when running the tests with the embedded Redis.

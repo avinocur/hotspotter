@@ -7,17 +7,19 @@ import org.scalatest.{Assertion, AsyncFunSuite, Matchers, compatible}
 import scala.concurrent.{Future, Promise}
 import scala.util.{Failure, Success, Try}
 
-trait TestCatsEffectsIOAsync extends AsyncFunSuite with Matchers{
-  def testResultAsync[T](testName: String)(testThunk: => IO[T])(assertThunk: T => compatible.Assertion)(implicit pos: source.Position): Unit = {
+trait TestCatsEffectsIOAsync extends AsyncFunSuite with Matchers {
+  def testResultAsync[T](testName: String)(testThunk: => IO[T])(assertThunk: T => Any)(implicit pos: source.Position): Unit = {
     test(testName){
       doTestResultAsync(testThunk) {
-        case Success(result) => assertThunk(result)
+        case Success(result) =>
+          assertThunk(result)
+          1 shouldBe 1
         case Failure(exception) => fail(s"Unexpected exception on test $testName", exception)
       }
     }
   }
 
-  def expectAsync[T, E <: Throwable](testName: String, expectedClass: Class[E], expectedMessage: Option[String] = None)(testThunk: => IO[T])(implicit pos: source.Position): Unit = {
+  def testExpectAsync[T, E <: Throwable](testName: String, expectedClass: Class[E], expectedMessage: Option[String] = None)(testThunk: => IO[T])(implicit pos: source.Position): Unit = {
     test(testName){
       doTestResultAsync(testThunk) {
         case Failure(exception) =>

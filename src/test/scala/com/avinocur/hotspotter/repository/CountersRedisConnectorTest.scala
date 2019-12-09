@@ -14,12 +14,12 @@ import redis.embedded.RedisServer
 
 import scala.concurrent.duration._
 
-class RedisConnectorTest extends TestCatsEffectsIOAsync with EmbeddedRedis with BeforeAndAfterEach {
+class CountersRedisConnectorTest extends TestCatsEffectsIOAsync with EmbeddedRedis with BeforeAndAfterEach {
   implicit val actorSystem = ActorSystem("test-system")
 
   var maybeRedis: Option[RedisServer] = None
   var maybeRedisPort: Option[Int] = None
-  var maybeRedisConnector: Option[RedisConnector] = None
+  var maybeRedisConnector: Option[CountersRedisConnector] = None
   var maybeRedisClient: Option[RedisClient] = None
   val keyHitsConfig = KeyHitsConfig(expireAt = 2 minutes, currentKeyExpireAt = 2 minutes, keyLimit = 3, timeWindowHours = 4)
 
@@ -30,7 +30,7 @@ class RedisConnectorTest extends TestCatsEffectsIOAsync with EmbeddedRedis with 
     maybeRedis = Some(startRedis()) // A random free port is chosen
     maybeRedisPort = Some(maybeRedis.get.ports().get(0))
     maybeRedisClient = Some(RedisClient("localhost", maybeRedisPort.get, None))
-    maybeRedisConnector = Some(new RedisConnector(maybeRedisClient.get, keyHitsConfig))
+    maybeRedisConnector = Some(new CountersRedisConnector(maybeRedisClient.get, keyHitsConfig))
   }
 
 

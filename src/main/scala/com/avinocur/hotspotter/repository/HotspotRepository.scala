@@ -1,32 +1,43 @@
 package com.avinocur.hotspotter.repository
 
+import java.time.LocalDateTime
+
 import cats.effect.IO
 import cats.implicits._
 import com.avinocur.hotspotter.LogSupport
 import com.avinocur.hotspotter.model.{KeyHit, KeyHitRecord}
-import com.avinocur.hotspotter.utils.BucketUtils
-import com.avinocur.hotspotter.utils.config.HotspotterConfig
 import com.avinocur.hotspotter.utils.config.HotspotterConfig.KeyHitsConfig
 
 
-class RedisHotspotRepository(redisClient: RedisConnection[IO], keyHitsConfig: KeyHitsConfig) extends HotspotRepository with LogSupport {
+class HotspotRepository(countersConnection: CountersConnection[IO], keyHitsConfig: KeyHitsConfig, bucketGenerator: BucketGenerator) extends HotspotRepositoryLike with LogSupport {
   import HotspotRepository._
 
   def save(keyHits: Seq[KeyHit]): IO[Unit] = {
-    (for {
-      keyHitRecord <- groupByKey(keyHits)
-    } yield redisClient.incrementCounter(BucketUtils.currentBucket, keyHitRecord.key, HotspotterConfig.keyHits.expireAt, keyHitRecord.count)).toList.sequence_
+    (
+      for {
+        keyHitRecord <- groupByKey(keyHits)
+      } yield countersConnection.incrementCounter(bucketGenerator.currentBucket(LocalDateTime.now()),
+        keyHitRecord.key, keyHitsConfig.expireAt, keyHitRecord.count)
+    ).toList.sequence_.recoverWith {
+      case e: Exception =>
+        log.error(s"Could not save keys: ${keyHits.map(_.key).mkString(",")}", e)
+        throw HotspotRepositoryException("Error saving keys to repository", e)
+    }
   }
 
   def getTopKeys(): IO[List[String]] = {
-    val timeWindow = HotspotterConfig.keyHits.timeWindowHours
-    val counterBuckets = BucketUtils.aggregationWindowBuckets(timeWindow)
+    val timeWindow = keyHitsConfig.timeWindowHours
+    val counterBuckets = bucketGenerator.aggregationWindowBuckets(LocalDateTime.now(), timeWindow)
 
-    redisClient.getTopKeys(counterBuckets, keyHitsConfig.keyLimit).map(t => t.toList)
+    countersConnection.getTopKeys(counterBuckets, keyHitsConfig.keyLimit).map(t => t.toList).recoverWith {
+      case e: Exception =>
+        log.error(s"Could not retrieve top keys.", e)
+        throw HotspotRepositoryException("Error retrieving top keys.", e)
+    }
   }
 }
 
-trait HotspotRepository {
+trait HotspotRepositoryLike {
   def save(keyHits: Seq[KeyHit]): IO[Unit]
   def getTopKeys(): IO[List[String]]
 }
@@ -36,3 +47,5 @@ object HotspotRepository {
     case (key, keyHits) => KeyHitRecord(key, keyHits.size.toDouble)
   }.toSeq
 }
+
+final case class HotspotRepositoryException(message: String = "", cause: Throwable = None.orNull) extends RuntimeException(message, cause)
