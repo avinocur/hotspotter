@@ -6,7 +6,7 @@ import com.avinocur.hotspotter.utils.ThreadUtils._
 import akka.actor.ActorSystem
 import cats.effect.IO
 import com.avinocur.hotspotter.LogSupport
-import com.avinocur.hotspotter.api.{HotspotterErrorResponse, HotspotterKeysResponse}
+import com.avinocur.hotspotter.api.{HotspotterErrorResponse, HotspotterKeysResponse, HotspotsService}
 import com.avinocur.hotspotter.model.KeyHits
 import com.avinocur.hotspotter.repository.{BucketGenerator, CountersConnection, CountersRedisConnector, HotspotRepository, HotspotRepositoryLike}
 import com.avinocur.hotspotter.utils.config.HotspotterConfig
@@ -33,7 +33,7 @@ object HostpotterServer extends StreamApp[IO] with Http4sDsl[IO] with LogSupport
   implicit val actorSystem: ActorSystem = createActorSystem
 
   val redisConnection: CountersConnection[IO] = CountersRedisConnector()
-  val hotspotRepository: HotspotRepositoryLike = new HotspotRepository(redisConnection, HotspotterConfig.keyHits, new BucketGenerator())
+  val hotspotRepository: HotspotRepositoryLike[IO] = new HotspotRepository(redisConnection, HotspotterConfig.keyHits, new BucketGenerator())
 
   protected def createActorSystem: ActorSystem = ActorSystem("RedisClient")
 
@@ -59,51 +59,11 @@ object HostpotterServer extends StreamApp[IO] with Http4sDsl[IO] with LogSupport
           )))
   }
 
-  def handleService[A](action: IO[A])(thunk: A => IO[Response[IO]]): IO[Response[IO]] = {
-    action.attempt.flatMap {
-      case Right(r) =>
-        thunk(r)
-      case Left(cause) =>
-        log.error("Unexpected error", cause)
-
-        val errorMessages = List(s"Unexpected Error. - ${cause.getClass.getName}: ${cause.getMessage}")
-        val apiError = HotspotterErrorResponse(500, "Internal Server Error", errorMessages)
-        InternalServerError(apiError.asJson)
-    }
-  }
-
-  val service = HttpService[IO] {
-    case GET -> Root / "hotspots" / key  =>
-      handleService {
-        hotspotRepository.getTopKeys()
-      } {
-        topKeys =>
-          if(key.isEmpty) BadRequest("Key is mandatory. Maybe you are looking for the /hotspots resource...")
-          else if(topKeys.contains(key)) NoContent()
-          else NotFound()
-      }
-
-    case GET -> Root / "hotspots" =>
-      handleService{
-        hotspotRepository.getTopKeys()
-      }{
-        topKeys => Ok(HotspotterKeysResponse(topKeys).asJson)
-      }
-
-    case req @ POST -> Root / "keys" => req.decodeWith(jsonOf[IO, KeyHits], strict = false) { keyHits =>
-      handleService{
-        hotspotRepository.save(keyHits.hits)
-      }{
-        _ => Accepted("Key hits will be stored ASAP!")
-      }
-    }
-  }
-
   override def stream(args: List[String], requestShutdown: IO[Unit]): fs2.Stream[IO, StreamApp.ExitCode] = {
     BlazeBuilder[IO]
       .bindHttp(serverConfig.port, serverConfig.interface)
       .withServiceErrorHandler(errorHandler)
-      .mountService(service, "/")
+      .mountService(HotspotsService.service(hotspotRepository), "/")
       .withExecutionContext(ExecutionContext.fromExecutor(executor))
       .serve
   }

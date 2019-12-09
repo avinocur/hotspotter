@@ -9,7 +9,7 @@ import com.avinocur.hotspotter.model.{KeyHit, KeyHitRecord}
 import com.avinocur.hotspotter.utils.config.HotspotterConfig.KeyHitsConfig
 
 
-class HotspotRepository(countersConnection: CountersConnection[IO], keyHitsConfig: KeyHitsConfig, bucketGenerator: BucketGenerator) extends HotspotRepositoryLike with LogSupport {
+class HotspotRepository(countersConnection: CountersConnection[IO], keyHitsConfig: KeyHitsConfig, bucketGenerator: BucketGenerator) extends HotspotRepositoryLike[IO] with LogSupport {
   import HotspotRepository._
 
   def save(keyHits: Seq[KeyHit]): IO[Unit] = {
@@ -37,9 +37,9 @@ class HotspotRepository(countersConnection: CountersConnection[IO], keyHitsConfi
   }
 }
 
-trait HotspotRepositoryLike {
-  def save(keyHits: Seq[KeyHit]): IO[Unit]
-  def getTopKeys(): IO[List[String]]
+trait HotspotRepositoryLike[F[_]] {
+  def save(keyHits: Seq[KeyHit]): F[Unit]
+  def getTopKeys(): F[List[String]]
 }
 
 object HotspotRepository {
