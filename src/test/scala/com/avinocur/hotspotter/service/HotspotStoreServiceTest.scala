@@ -1,9 +1,10 @@
-package com.avinocur.hotspotter.repository
+package com.avinocur.hotspotter.service
 
 import java.time.LocalDateTime
 
 import cats.effect.IO
 import com.avinocur.hotspotter.model.KeyHit
+import com.avinocur.hotspotter.repository.{BucketGenerator, CountersConnection}
 import com.avinocur.hotspotter.utils.TestCatsEffectsIOAsync
 import com.avinocur.hotspotter.utils.config.HotspotterConfig.KeyHitsConfig
 import org.mockito.{ArgumentMatchersSugar, MockitoSugar}
@@ -11,7 +12,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import scala.concurrent.duration._
 
-class HotspotRepositoryTest extends TestCatsEffectsIOAsync with MockitoSugar with ArgumentMatchersSugar with BeforeAndAfterEach {
+class HotspotStoreServiceTest extends TestCatsEffectsIOAsync with MockitoSugar with ArgumentMatchersSugar with BeforeAndAfterEach {
     val keyHitsConfig = KeyHitsConfig(expireAt = 1 hours, currentKeyExpireAt = 1 hours, keyLimit = 3, timeWindowHours = 5)
 
     var bucketGeneratorMockOpt: Option[BucketGenerator] = None
@@ -20,15 +21,15 @@ class HotspotRepositoryTest extends TestCatsEffectsIOAsync with MockitoSugar wit
     var countersConnectionMockOpt: Option[CountersConnection[IO]] = None
     def countersConnectionMock: CountersConnection[IO] = countersConnectionMockOpt.get
 
-    var hotspotRepositoryOpt: Option[HotspotRepository] = None
-    def hotspotRepository: HotspotRepository = hotspotRepositoryOpt.get
+    var hotspotRepositoryOpt: Option[HotspotStoreService] = None
+    def hotspotRepository: HotspotStoreService = hotspotRepositoryOpt.get
 
     val CURRENT_BUCKET = "CURRENTBUCKET"
 
     override def beforeEach(): Unit = {
         bucketGeneratorMockOpt = Some(mock[BucketGenerator])
         countersConnectionMockOpt = Some(mock[CountersConnection[IO]])
-        hotspotRepositoryOpt = Some(new HotspotRepository(countersConnectionMock, keyHitsConfig, bucketGeneratorMock))
+        hotspotRepositoryOpt = Some(new HotspotStoreService(countersConnectionMock, keyHitsConfig, bucketGeneratorMock))
 
 
         when(bucketGeneratorMock.currentBucket(any[LocalDateTime])) thenReturn (CURRENT_BUCKET)

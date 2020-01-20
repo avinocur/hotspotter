@@ -1,11 +1,11 @@
 package com.avinocur.hotspotter.api
 
 import com.avinocur.hotspotter.model.{KeyHit, KeyHits}
-import com.avinocur.hotspotter.repository.{HotspotRepositoryException, HotspotRepositoryLike}
 import com.avinocur.hotspotter.utils.TestCatsEffectsIOAsync
 import org.http4s.{EntityDecoder, HttpService, Request, Response, Status, Uri}
 import org.http4s.dsl.io.{POST, uri}
 import cats.effect.IO
+import com.avinocur.hotspotter.service.{HotspotRepositoryException, HotspotStoreServiceLike}
 import io.circe.Json
 import io.circe.syntax._
 import org.http4s.circe._
@@ -14,55 +14,55 @@ import org.mockito.{ArgumentMatchersSugar, MockitoSugar}
 import org.scalatest.BeforeAndAfterEach
 
 class HotspotsServiceTest extends TestCatsEffectsIOAsync with MockitoSugar with ArgumentMatchersSugar with BeforeAndAfterEach {
-  var hotspotRepositoryMockOpt: Option[HotspotRepositoryLike[IO]] = None
-  def hotspotRepositoryMock: HotspotRepositoryLike[IO] = hotspotRepositoryMockOpt.get
+  var hotspotStoreServiceMockOpt: Option[HotspotStoreServiceLike[IO]] = None
+  def hotspotStoreServiceMock: HotspotStoreServiceLike[IO] = hotspotStoreServiceMockOpt.get
 
   var serviceOpt: Option[HttpService[IO]] = None
   def service: HttpService[IO] = serviceOpt.get
 
   override def beforeEach(): Unit = {
-    hotspotRepositoryMockOpt = Some(mock[HotspotRepositoryLike[IO]])
+    hotspotStoreServiceMockOpt = Some(mock[HotspotStoreServiceLike[IO]])
 
-    serviceOpt = Some(HotspotsService.service(hotspotRepositoryMock))
+    serviceOpt = Some(HotspotsService.service(hotspotStoreServiceMock))
   }
 
   testResultAsync("POST /keys with many keys should save on repository"){
     val json = KeyHits(KeyHit("KEY1")::KeyHit("KEY2")::Nil).asJson
 
-    when(hotspotRepositoryMock.save(any[Seq[KeyHit]])) thenReturn (IO {})
+    when(hotspotStoreServiceMock.save(any[Seq[KeyHit]])) thenReturn (IO {})
 
     postForKeys(json)
   } { response =>
     checkResponseWithBody(response, Accepted, "Key hits will be stored ASAP!")
 
-    verify(hotspotRepositoryMock, times(1)).save(KeyHit("KEY1")::KeyHit("KEY2")::Nil)
+    verify(hotspotStoreServiceMock, times(1)).save(KeyHit("KEY1")::KeyHit("KEY2")::Nil)
   }
 
   testResultAsync("POST /keys Empty keys should not fail"){
     val json = KeyHits(Nil).asJson
 
-    when(hotspotRepositoryMock.save(any[Seq[KeyHit]])) thenReturn (IO {})
+    when(hotspotStoreServiceMock.save(any[Seq[KeyHit]])) thenReturn (IO {})
 
     postForKeys(json)
   } { response =>
     checkResponseWithBody(response, Accepted, "Key hits will be stored ASAP!")
 
-    verify(hotspotRepositoryMock, times(1)).save(Nil)
+    verify(hotspotStoreServiceMock, times(1)).save(Nil)
   }
 
   testResultAsync("POST /keys Repository throws exception. Should return error response"){
     val json = KeyHits(KeyHit("KEY1")::KeyHit("KEY2")::Nil).asJson
 
-    when(hotspotRepositoryMock.save(any[Seq[KeyHit]])) thenReturn (IO.raiseError(HotspotRepositoryException("Intended Test Exception")))
+    when(hotspotStoreServiceMock.save(any[Seq[KeyHit]])) thenReturn (IO.raiseError(HotspotRepositoryException("Intended Test Exception")))
 
     postForKeys(json)
   } { response =>
     checkResponseWithBody(response, InternalServerError, HotspotterErrorResponse(500, "Internal Server Error",
-      List(s"Unexpected Error. - com.avinocur.hotspotter.repository.HotspotRepositoryException: Intended Test Exception")).asJson)
+      List(s"Unexpected Error. - com.avinocur.hotspotter.service.HotspotRepositoryException: Intended Test Exception")).asJson)
   }
 
   testResultAsync("GET /hotspots Response is empty. Should return empty"){
-    when(hotspotRepositoryMock.getTopKeys()).thenReturn(IO {Nil})
+    when(hotspotStoreServiceMock.getTopKeys()).thenReturn(IO {Nil})
 
     getForHotspots()
   } { response =>
@@ -70,7 +70,7 @@ class HotspotsServiceTest extends TestCatsEffectsIOAsync with MockitoSugar with 
   }
 
   testResultAsync("GET /hotspots Response has keys. Should return keys"){
-    when(hotspotRepositoryMock.getTopKeys()).thenReturn(IO { "KEY1" :: "KEY2" :: "KEY3" :: Nil })
+    when(hotspotStoreServiceMock.getTopKeys()).thenReturn(IO { "KEY1" :: "KEY2" :: "KEY3" :: Nil })
 
     getForHotspots()
   } { response =>
@@ -78,16 +78,16 @@ class HotspotsServiceTest extends TestCatsEffectsIOAsync with MockitoSugar with 
   }
 
   testResultAsync("GET /hotspots Repository throws exception. Should return error response"){
-    when(hotspotRepositoryMock.getTopKeys()) thenReturn (IO.raiseError(HotspotRepositoryException("Intended Test Exception")))
+    when(hotspotStoreServiceMock.getTopKeys()) thenReturn (IO.raiseError(HotspotRepositoryException("Intended Test Exception")))
 
     getForHotspots()
   } { response =>
     checkResponseWithBody(response, InternalServerError, HotspotterErrorResponse(500, "Internal Server Error",
-      List(s"Unexpected Error. - com.avinocur.hotspotter.repository.HotspotRepositoryException: Intended Test Exception")).asJson)
+      List(s"Unexpected Error. - com.avinocur.hotspotter.service.HotspotRepositoryException: Intended Test Exception")).asJson)
   }
 
   testResultAsync("GET /hotspots/key Key is not a hotspot. Should return NotFound"){
-    when(hotspotRepositoryMock.getTopKeys()).thenReturn(IO {Nil})
+    when(hotspotStoreServiceMock.getTopKeys()).thenReturn(IO {Nil})
 
     getForHotspotKey("AKEY")
   } { response =>
@@ -95,7 +95,7 @@ class HotspotsServiceTest extends TestCatsEffectsIOAsync with MockitoSugar with 
   }
 
   testResultAsync("GET /hotspots/key Key is a hotspot. Should return NoContent"){
-    when(hotspotRepositoryMock.getTopKeys()).thenReturn(IO { "KEY1" :: "KEY2" :: "KEY3" :: Nil })
+    when(hotspotStoreServiceMock.getTopKeys()).thenReturn(IO { "KEY1" :: "KEY2" :: "KEY3" :: Nil })
 
     getForHotspotKey("KEY2")
   } { response =>
@@ -103,12 +103,12 @@ class HotspotsServiceTest extends TestCatsEffectsIOAsync with MockitoSugar with 
   }
 
   testResultAsync("GET /hotspots/key Repository throws exception. Should return error response"){
-    when(hotspotRepositoryMock.getTopKeys()) thenReturn (IO.raiseError(HotspotRepositoryException("Intended Test Exception")))
+    when(hotspotStoreServiceMock.getTopKeys()) thenReturn (IO.raiseError(HotspotRepositoryException("Intended Test Exception")))
 
     getForHotspotKey("AKEY")
   } { response =>
     checkResponseWithBody(response, InternalServerError, HotspotterErrorResponse(500, "Internal Server Error",
-      List(s"Unexpected Error. - com.avinocur.hotspotter.repository.HotspotRepositoryException: Intended Test Exception")).asJson)
+      List(s"Unexpected Error. - com.avinocur.hotspotter.service.HotspotRepositoryException: Intended Test Exception")).asJson)
   }
 
   def postForKeys(json: Json): IO[Response[IO]] =

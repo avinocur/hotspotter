@@ -2,7 +2,7 @@ package com.avinocur.hotspotter.api
 
 import cats.effect.IO
 import com.avinocur.hotspotter.model.KeyHits
-import com.avinocur.hotspotter.repository.HotspotRepositoryLike
+import com.avinocur.hotspotter.service.HotspotStoreServiceLike
 import org.http4s._
 import org.http4s.circe._
 import io.circe.syntax._
@@ -10,7 +10,7 @@ import io.circe.syntax._
 
 object HotspotsService extends HotspotterHttp4sErrorHandling {
 
-  def service(hotspotRepository: HotspotRepositoryLike[IO]): HttpService[IO] = HttpService[IO] {
+  def service(hotspotRepository: HotspotStoreServiceLike[IO]): HttpService[IO] = HttpService[IO] {
     case GET -> Root / "hotspots" / key  =>
       handleService {
         hotspotRepository.getTopKeys()

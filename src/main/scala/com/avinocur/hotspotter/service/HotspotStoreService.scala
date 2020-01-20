@@ -1,4 +1,4 @@
-package com.avinocur.hotspotter.repository
+package com.avinocur.hotspotter.service
 
 import java.time.LocalDateTime
 
@@ -6,13 +6,13 @@ import cats.effect.IO
 import cats.implicits._
 import com.avinocur.hotspotter.LogSupport
 import com.avinocur.hotspotter.model.{KeyHit, KeyHitRecord}
+import com.avinocur.hotspotter.repository.{BucketGenerator, CountersConnection}
 import com.avinocur.hotspotter.utils.config.HotspotterConfig.KeyHitsConfig
 
 
-class HotspotRepository(countersConnection: CountersConnection[IO], keyHitsConfig: KeyHitsConfig, bucketGenerator: BucketGenerator) extends HotspotRepositoryLike[IO] with LogSupport {
-  import HotspotRepository._
+class HotspotStoreService(countersConnection: CountersConnection[IO], keyHitsConfig: KeyHitsConfig, bucketGenerator: BucketGenerator) extends HotspotStoreServiceLike[IO] with LogSupport {
 
-  def save(keyHits: Seq[KeyHit]): IO[Unit] = {
+    def save(keyHits: Seq[KeyHit]): IO[Unit] = {
     (
       for {
         keyHitRecord <- groupByKey(keyHits)
@@ -21,7 +21,7 @@ class HotspotRepository(countersConnection: CountersConnection[IO], keyHitsConfi
     ).toList.sequence_.recoverWith {
       case e: Exception =>
         log.error(s"Could not save keys: ${keyHits.map(_.key).mkString(",")}", e)
-        throw HotspotRepositoryException("Error saving keys to repository", e)
+        IO.raiseError(HotspotRepositoryException("Error saving keys to repository", e))
     }
   }
 
@@ -32,20 +32,18 @@ class HotspotRepository(countersConnection: CountersConnection[IO], keyHitsConfi
     countersConnection.getTopKeys(counterBuckets, keyHitsConfig.keyLimit).map(t => t.toList).recoverWith {
       case e: Exception =>
         log.error(s"Could not retrieve top keys.", e)
-        throw HotspotRepositoryException("Error retrieving top keys.", e)
+        IO.raiseError(HotspotRepositoryException("Error retrieving top keys.", e))
     }
   }
-}
 
-trait HotspotRepositoryLike[F[_]] {
-  def save(keyHits: Seq[KeyHit]): F[Unit]
-  def getTopKeys(): F[List[String]]
-}
-
-object HotspotRepository {
-  def groupByKey(hits: Seq[KeyHit]): Seq[KeyHitRecord] = hits.groupBy(_.key).map {
+  private def groupByKey(hits: Seq[KeyHit]): Seq[KeyHitRecord] = hits.groupBy(_.key).map {
     case (key, keyHits) => KeyHitRecord(key, keyHits.size.toDouble)
   }.toSeq
+}
+
+trait HotspotStoreServiceLike[F[_]] {
+  def save(keyHits: Seq[KeyHit]): F[Unit]
+  def getTopKeys(): F[List[String]]
 }
 
 final case class HotspotRepositoryException(message: String = "", cause: Throwable = None.orNull) extends RuntimeException(message, cause)

@@ -6,16 +6,14 @@ import com.avinocur.hotspotter.utils.ThreadUtils._
 import akka.actor.ActorSystem
 import cats.effect.IO
 import com.avinocur.hotspotter.LogSupport
-import com.avinocur.hotspotter.api.{HotspotterErrorResponse, HotspotterKeysResponse, HotspotsService}
-import com.avinocur.hotspotter.model.KeyHits
-import com.avinocur.hotspotter.repository.{BucketGenerator, CountersConnection, CountersRedisConnector, HotspotRepository, HotspotRepositoryLike}
+import com.avinocur.hotspotter.api.{HotspotsService, HotspotterErrorResponse, HotspotterKeysResponse}
+import com.avinocur.hotspotter.repository.{BucketGenerator, CountersConnection, CountersRedisConnector}
+import com.avinocur.hotspotter.service.{HotspotStoreService, HotspotStoreServiceLike}
 import com.avinocur.hotspotter.utils.config.HotspotterConfig
 import fs2.StreamApp
 import fs2.internal.NonFatal
 import org.http4s._
-import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
-import io.circe.syntax._
 import org.http4s.headers.{Connection, `Content-Length`}
 import org.http4s.server.ServiceErrorHandler
 import org.http4s.server.blaze.BlazeBuilder
@@ -33,7 +31,7 @@ object HostpotterServer extends StreamApp[IO] with Http4sDsl[IO] with LogSupport
   implicit val actorSystem: ActorSystem = createActorSystem
 
   val redisConnection: CountersConnection[IO] = CountersRedisConnector()
-  val hotspotRepository: HotspotRepositoryLike[IO] = new HotspotRepository(redisConnection, HotspotterConfig.keyHits, new BucketGenerator())
+  val hotspotRepository: HotspotStoreServiceLike[IO] = new HotspotStoreService(redisConnection, HotspotterConfig.keyHits, new BucketGenerator())
 
   protected def createActorSystem: ActorSystem = ActorSystem("RedisClient")
 
