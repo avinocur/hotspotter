@@ -12,6 +12,12 @@ import com.avinocur.hotspotter.utils.config.HotspotterConfig.KeyHitsConfig
 
 class HotspotStoreService(countersConnection: CountersConnection[IO], keyHitsConfig: KeyHitsConfig, bucketGenerator: BucketGenerator) extends HotspotStoreServiceLike[IO] with LogSupport {
 
+  /**
+   * Stores the key hits in the current time bucket.
+   *
+   * @param keyHits key hits to be saved
+   * @return
+   */
     def save(keyHits: Seq[KeyHit]): IO[Unit] = {
     (
       for {
@@ -25,6 +31,13 @@ class HotspotStoreService(countersConnection: CountersConnection[IO], keyHitsCon
     }
   }
 
+  /**
+   * Retrieves the top N keys by the number of requests in the last H hours.
+   * N is configured by the property key-hits.key-limit
+   * H is configured by the property key-hits.time-window-hours
+   *
+   * @return A sorted list with the top keys
+   */
   def getTopKeys(): IO[List[String]] = {
     val timeWindow = keyHitsConfig.timeWindowHours
     val counterBuckets = bucketGenerator.aggregationWindowBuckets(LocalDateTime.now(), timeWindow)

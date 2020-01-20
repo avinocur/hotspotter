@@ -21,8 +21,25 @@ trait CountersConnection[F[_]] extends LogSupport {
 }
 
 class CountersRedisConnector(client: Transactions with RedisCommands, keyHitsConfig: KeyHitsConfig) extends CountersConnection[IO] {
+  /*
+   * Bucket to store the cached aggregation.
+   * This bucket will be kept alive by the time configured in key-hits.current-key-expire-at
+   */
   val aggregationBucket = "aggregated"
 
+  /**
+   * Counters for each key are stored in hourly buckets in redis sorted sets. Each bucket contains the whole set for
+   * the keys requested during that hour.
+   * The operation used in redis to perform this is ZINCRBY: https://redis.io/commands/zincrby
+   *
+   * If the bucket does not exist, it will be created. If the key is not present, it will be created in the redis set.
+   *
+   * @param bucket the time bucket where the key should be updated
+   * @param key the key to update
+   * @param expireAt the time to live for the bucket
+   * @param quantity the number of hits to increment for the given key
+   * @return
+   */
   override def incrementCounter(bucket: String, key: String, expireAt: Duration, quantity: Double): IO[Unit] =
     IO.fromFuture( IO {
       for {
@@ -34,6 +51,19 @@ class CountersRedisConnector(client: Transactions with RedisCommands, keyHitsCon
       }
     })
 
+  /**
+   * Retrieves the top keys from Redis.
+   * The operation used is ZREVRANGE, which returns a range of elements sorted by score (in this case, key hits)
+   * from the highest to the lowest.
+   * See Redis docs: https://redis.io/commands/zrevrange
+   *
+   * To avoid having to compute this every time (performance is favored over precision), the result is cached in an
+   * aggregationBucket for the time configured in key-hits.current-key-expire-at.
+   *
+   * @param counterBuckets The names of all the counter buckets to be used.
+   * @param keyLimit The number of keys to consider (see key-hits.key-limit)
+   * @return A sorted sequence of the top keys
+   */
   override def getTopKeys(counterBuckets: List[String], keyLimit: Int): IO[Seq[String]] = {
     val lowerBound: Long = 0
     val upperBound: Long = keyLimit.toLong - 1
@@ -47,6 +77,17 @@ class CountersRedisConnector(client: Transactions with RedisCommands, keyHitsCon
     }).flatten
   }
 
+  /**
+   * Computes the union of the counterBuckets sorted sets, and stores the result in the aggregationBucket,
+   * using the counterBuckets for each hour stored in redis.
+   * The operation used is ZUNIONSTORE in Redis: https://redis.io/commands/zunionstore.
+   *
+   *
+   * @param counterBuckets the names of the buckets in Redis to be considered
+   * @param lowerBound the lower bound for the range of keys
+   * @param upperBound the upper bound for the range of keys
+   * @return the top aggregated keys, sorted descending by hits
+   */
   private def createAggregationBucket(counterBuckets: List[String], lowerBound: Long, upperBound: Long): IO[Seq[String]] = {
     val expiration: Long = keyHitsConfig.currentKeyExpireAt.toSeconds
 
